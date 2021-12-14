@@ -47,7 +47,21 @@ parser.add_argument(
     help=f'Enable local cache of known and unknown hashes in {CACHE_DIR}',
     default=False,
 )
+parser.add_argument(
+    "--bloomfilter",
+    help="Specify filename of a bloomfilter in DCSO bloomfilter format",
+    default=None,
+)
 args = parser.parse_args()
+
+if args.bloomfilter is not None:
+    from flor import BloomFilter
+
+    bf = BloomFilter()
+    with open(args.bloomfilter, 'rb') as f:
+        bf.read(f)
+    if b"6F1C170761C212EFD5004DF7FB36CEAF9FB053F7" in bf:
+        bloomfilter_source = "hashlookup-blomfilter"
 
 if not args.dir:
     parser.print_help()
@@ -61,6 +75,15 @@ if args.cache:
 def lookup(value=None):
     if value is None:
         return False
+
+    if args.bloomfilter is not None:
+        if value.encode() in bf:
+            ret = {}
+            ret['SHA-1'] = value
+            return ret
+        else:
+            return False
+
     r = requests.get(
         f'https://hashlookup.circl.lu/lookup/sha1/{value}', headers=headers
     )
@@ -116,7 +139,7 @@ for fn in [y for x in os.walk(args.dir) for y in glob(os.path.join(x[0], '*'))]:
             hresult = json.load(f)
     else:
         hresult = lookup(value=h)
-    if 'SHA-1' not in hresult:
+    if hresult is False or 'SHA-1' not in hresult:
         stats['unknown'] += 1
         files['unknown_files'].append(f'{fn},{h}')
         if args.cache:
@@ -150,6 +173,10 @@ if args.format == "csv":
             print(f"unknown,{line},{fsize}")
 
     if args.include_stats:
+        if args.bloomfilter is not None:
+            bloomfilter_source = bloomfilter_source
+        else:
+            bloomfilter_source = "None - live request"
         print(
-            f'stats,Analysed directory {args.dir} on {hostname} running {platform} at {when}- Found {stats["found"]} on hashlookup.circl.lu - Unknown files {stats["unknown"]} - Excluded files {stats["excluded"]}'
+            f'stats,Analysed directory {args.dir} on {hostname} running {platform} at {when}- Found {stats["found"]} on hashlookup.circl.lu ({bloomfilter_source})- Unknown files {stats["unknown"]} - Excluded files {stats["excluded"]}'
         )

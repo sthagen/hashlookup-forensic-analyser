@@ -2,25 +2,27 @@
 
 [![lint_python](https://github.com/hashlookup/hashlookup-forensic-analyser/actions/workflows/lint_python.yml/badge.svg)](https://github.com/hashlookup/hashlookup-forensic-analyser/actions/workflows/lint_python.yml)
 
-Analyse a forensic target (such as a directory) to find and report files found and not found from [CIRCL hashlookup public service](https://circl.lu/services/hashlookup/).
+Analyse a forensic target (such as a directory) to find and report files found and not found from [CIRCL hashlookup public service](https://circl.lu/services/hashlookup/) or the bloom filter from CIRCL hashlookup.
 This tool can help a [digital forensic investigator](https://gist.github.com/adulau/e9e95fead4f32ac0fe725cb2a32fdb51) to know the context, origin of specific files during a digital forensic investigation.
 
 # Usage
 
 ~~~~
-usage: hashlookup-analyser.py [-h] [-v] [-d DIR] [--print-all] [--print-unknown] [--include-stats] [--format FORMAT] [--cache]
+usage: hashlookup-analyser.py [-h] [-v] [-d DIR] [--print-all] [--print-unknown] [--include-stats] [--format FORMAT] [--cache] [--bloomfilter BLOOMFILTER]
 
 Analyse a forensic target to find and report files found and not found in hashlookup CIRCL public service
 
 optional arguments:
-  -h, --help         show this help message and exit
-  -v, --verbose      Verbose output
-  -d DIR, --dir DIR  Directory to analyse
-  --print-all        Print all files result including known and unknown
-  --print-unknown    Print all files unknown to hashlookup service
-  --include-stats    Include statistics in the CSV export
-  --format FORMAT    Output format (default is CSV)
-  --cache            Enable local cache of known and unknown hashes in /tmp/hashlookup-forensic-analyser
+  -h, --help            show this help message and exit
+  -v, --verbose         Verbose output
+  -d DIR, --dir DIR     Directory to analyse
+  --print-all           Print all files result including known and unknown
+  --print-unknown       Print all files unknown to hashlookup service
+  --include-stats       Include statistics in the CSV export
+  --format FORMAT       Output format (default is CSV)
+  --cache               Enable local cache of known and unknown hashes in /tmp/hashlookup-forensic-analyser
+  --bloomfilter BLOOMFILTER
+                        Specify filename of a bloomfilter in DCSO bloomfilter format
 ~~~~
 
 ## Example
@@ -69,6 +71,15 @@ unknown,/usr/local/bin/__pycache__/vba_extract.cpython-38.pyc,BABF747254BED48813
 unknown,/usr/local/bin/__pycache__/pdf2txt.cpython-38.pyc,0C22717A2D2C6676005B99EB6CFF03BF73DAD5A1,6684
 unknown,/usr/local/bin/__pycache__/wsdump.cpython-38.pyc,ADD28D31B88E5995A0725A424B415C350726CFD5,6449
 stats,Analysed directory /usr/local/bin/ on kolmogorov running Linux-5.10.0-1045-oem-x86_64-with-glibc2.29 at 2021-10-17 15:50:07.299694+00:00- Found 6 on hashlookup.circl.lu - Unknown files 34 - Excluded files 0
+~~~~
+## Bloom filter
+
+If you don't want to share your lookups online and do faster lookup, hashlookup provides a [bloom filter to download](https://cra.circl.lu/hashlookup/hashlookup-full.bloom).
+
+The file is around 700MB and can be stored locally in your home directory. `hashlookup-analyser` works in the same way, `--bloomfilter` option allows to specify the filename locatoon of the bloom filter.
+
+~~~~
+python3 bin/hashlookup-analyser.py --bloomfilter /home/adulau/hashlookup/hashlookup-full.bloom --include-stats -d /bin
 ~~~~
 
 # License
