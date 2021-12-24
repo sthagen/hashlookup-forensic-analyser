@@ -2,6 +2,7 @@
 import argparse
 import datetime
 import hashlib
+import itertools
 import json
 import os
 import platform as pl
@@ -21,11 +22,24 @@ headers = {'User-Agent': f'{NAME}/{VERSION}'}
 hostname = pl.node()
 platform = pl.platform()
 when = datetime.datetime.now(pytz.utc)
+spinner = itertools.cycle(['◰', '◳', '◲', '◱'])
 
 parser = argparse.ArgumentParser(
-    description="Analyse a forensic target to find and report files found and not found in hashlookup CIRCL public service"
+    description="Analyse a forensic target to find and report files found and not found in hashlookup CIRCL public service."
 )
 parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
+parser.add_argument(
+    "--extended-debug",
+    action="store_true",
+    default=False,
+    help="Debug file processed along with the mode and type.",
+)
+parser.add_argument(
+    "--progress",
+    action="store_true",
+    default=True,
+    help="Pring progress of the file lookup on stderr.",
+)
 parser.add_argument("-d", "--dir", help="Directory to analyse")
 parser.add_argument(
     "--print-all",
@@ -93,8 +107,10 @@ def lookup(value=None):
 notanalysed_files = []
 files = {'known_files': [], 'unknown_files': []}  # type: ignore
 
-stats = {'found': 0, 'unknown': 0, 'excluded': 0}
+stats = {'found': 0, 'unknown': 0, 'excluded': 0, 'analysed': 0}
 
+if args.progress:
+    progress = 0
 
 for fn in [y for x in os.walk(args.dir) for y in glob(os.path.join(x[0], '*'))]:
     if args.verbose:
@@ -109,6 +125,13 @@ for fn in [y for x in os.walk(args.dir) for y in glob(os.path.join(x[0], '*'))]:
     else:
         fn_info = os.stat(fn)
     mode = fn_info.st_mode
+    if args.extended_debug:
+        print(f'file={fn}, mode={mode}, finfo={fn_info}')
+    if args.progress:
+        sys.stderr.write(next(spinner))
+        sys.stderr.write(
+            f'  - Files analysed={stats["analysed"]}, excluded={stats["excluded"]}, unknown={stats["unknown"]}, found={stats["found"]}\r'
+        )
     if stat.S_ISDIR(mode):
         notanalysed_files.append(f'{fn},dir')
         continue
@@ -116,13 +139,40 @@ for fn in [y for x in os.walk(args.dir) for y in glob(os.path.join(x[0], '*'))]:
         notanalysed_files.append(f'{fn},socket')
         stats['excluded'] += 1
         continue
+    elif stat.S_ISFIFO(mode):
+        notanalysed_files.append(f'{fn},fifo')
+        stats['excluded'] += 1
+        continue
+    elif stat.S_ISBLK(mode):
+        notanalysed_files.append(f'{fn},blockdevice')
+        stats['excluded'] += 1
+        continue
+    elif stat.S_ISCHR(mode):
+        notanalysed_files.append(f'{fn},chardevice')
+        stats['excluded'] += 1
+        continue
+    elif stat.S_ISDOOR(mode):
+        notanalysed_files.append(f'{fn},dooripc')
+        stats['excluded'] += 1
+        continue
     elif not os.path.exists(fn):
         notanalysed_files.append(f'{fn},listed-but-no-existing')
         stats['excluded'] += 1
         continue
+    elif stat.S_ISREG(mode):
+        pass
+    else:
+        notanalysed_files.append(f'{fn},not regular/unknown')
+        stats['excluded'] += 1
+        continue
+
     sha1 = hashlib.sha1()
     with open(fn, 'rb') as f:
-        size = os.fstat(f.fileno()).st_size
+        try:
+            size = os.fstat(f.fileno()).st_size
+        except:
+            size = 0
+            pass
         while True:
             data = f.read(BUF_SIZE)
             if not data:
@@ -151,9 +201,9 @@ for fn in [y for x in os.walk(args.dir) for y in glob(os.path.join(x[0], '*'))]:
         if args.cache:
             with open(f'{CACHE_DIR}/known/{h}', 'wb') as f:
                 f.write(json.dumps(hresult).encode())
-
-        if args.verbose:
-            print(hresult)
+    stats['analysed'] += 1
+    if args.verbose:
+        print(hresult)
 
 # print(notanalysed_files)
 if args.format == "csv":
@@ -178,5 +228,5 @@ if args.format == "csv":
         else:
             bloomfilter_source = "None - live request"
         print(
-            f'stats,Analysed directory {args.dir} on {hostname} running {platform} at {when}- Found {stats["found"]} on hashlookup.circl.lu ({bloomfilter_source})- Unknown files {stats["unknown"]} - Excluded files {stats["excluded"]}'
+            f'stats,Analysed directory {args.dir} on {hostname} running {platform} at {when} on a total files of {stats["analysed"]} - Found {stats["found"]} on hashlookup.circl.lu ({bloomfilter_source})- Unknown files {stats["unknown"]} - Excluded files {stats["excluded"]}'
         )
