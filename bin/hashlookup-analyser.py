@@ -14,7 +14,7 @@ import pytz
 import requests
 
 BUF_SIZE = 65536
-VERSION = "0.3"
+VERSION = "0.7"
 NAME = "hashlookup-forensic-analyser"
 # cache directory name needs to be known between execution of the script
 CACHE_DIR = "/tmp/hashlookup-forensic-analyser"  # nosec
@@ -167,18 +167,24 @@ for fn in [y for x in os.walk(args.dir) for y in glob(os.path.join(x[0], '*'))]:
         continue
 
     sha1 = hashlib.sha1()
-    with open(fn, 'rb') as f:
-        try:
-            size = os.fstat(f.fileno()).st_size
-        except:
-            size = 0
-            pass
-        while True:
-            data = f.read(BUF_SIZE)
-            if not data:
-                break
-            sha1.update(data)
-    h = sha1.hexdigest().upper()
+    try:
+        with open(fn, 'rb') as f:
+            try:
+                size = os.fstat(f.fileno()).st_size
+            except:
+                size = 0
+                pass
+            while True:
+                data = f.read(BUF_SIZE)
+                if not data:
+                    break
+                sha1.update(data)
+        h = sha1.hexdigest().upper()
+    except Exception as e:
+        sys.stderr.write(f'Unable to read {e} file {fn}\n')
+        notanalysed_files.append(f'{fn},{e}')
+        stats['excluded'] += 1
+        pass
 
     knowncachefile = f'{CACHE_DIR}/known/{h}'
     cachefile = f'{CACHE_DIR}/unknown/{h}'
@@ -191,13 +197,19 @@ for fn in [y for x in os.walk(args.dir) for y in glob(os.path.join(x[0], '*'))]:
         hresult = lookup(value=h)
     if hresult is False or 'SHA-1' not in hresult:
         stats['unknown'] += 1
-        files['unknown_files'].append(f'{fn},{h}')
+        t = {}
+        t['FileName'] = fn
+        t['hash'] = h
+        files['unknown_files'].append(t)
         if args.cache:
             with open(f'{CACHE_DIR}/unknown/{h}', 'wb') as f:
                 f.write(b"Unknown")
     else:
         stats['found'] += 1
-        files['known_files'].append(f'{fn},{h}')
+        t = {}
+        t['FileName'] = fn
+        t['hash'] = h
+        files['known_files'].append(t)
         if args.cache:
             with open(f'{CACHE_DIR}/known/{h}', 'wb') as f:
                 f.write(json.dumps(hresult).encode())
@@ -205,22 +217,21 @@ for fn in [y for x in os.walk(args.dir) for y in glob(os.path.join(x[0], '*'))]:
     if args.verbose:
         print(hresult)
 
-# print(notanalysed_files)
 if args.format == "csv":
     print('hashlookup_result,filename,sha-1,size')
     if args.print_all:
         for key in files.keys():
-            for line in files[key]:
-                name = line.split(',')
-                fsize = os.path.getsize(name[0])
+            for file_object in files[key]:
+                fsize = os.path.getsize(file_object['FileName'])
                 filetype = key.split("_")
-                print(f"{filetype[0]},{line},{fsize}")
+                print(
+                    f"{filetype[0]},\"{file_object['FileName']}\",{file_object['hash']},{fsize}"
+                )
 
     elif args.print_unknown:
-        for line in files['unknown_files']:
-            name = line.split(',')
-            fsize = os.path.getsize(name[0])
-            print(f"unknown,{line},{fsize}")
+        for file_object in files['unknown_files']:
+            fsize = os.path.getsize(file_object['FileName'])
+            print(f"unknown,{file_object['FileName']},{file_object['hash']},{fsize}")
 
     if args.include_stats:
         if args.bloomfilter is not None:
