@@ -2,32 +2,43 @@
 
 [![lint_python](https://github.com/hashlookup/hashlookup-forensic-analyser/actions/workflows/lint_python.yml/badge.svg)](https://github.com/hashlookup/hashlookup-forensic-analyser/actions/workflows/lint_python.yml)
 
-Analyse a forensic target (such as a directory) to find and report files found and not found from [CIRCL hashlookup public service](https://circl.lu/services/hashlookup/) or the bloom filter from CIRCL hashlookup.
+Analyse a forensic target (such as a directory) to find and report files found and not found from [CIRCL hashlookup public service](https://circl.lu/services/hashlookup/) or the [Bloom filter](https://github.com/hashlookup/hashlookup-forensic-analyser#bloom-filter) from CIRCL hashlookup.
 This tool can help a [digital forensic investigator](https://gist.github.com/adulau/e9e95fead4f32ac0fe725cb2a32fdb51) to know the context, origin of specific files during a digital forensic investigation.
 
 # Usage
 
 ~~~~
-usage: hashlookup-analyser.py [-h] [-v] [--extended-debug] [--progress] [-d DIR] [--print-all] [--print-unknown] [--include-stats] [--format FORMAT] [--cache] [--bloomfilter BLOOMFILTER]
+usage: hashlookup-analyser.py [-h] [-v] [--extended-debug] [--progress] [-d DIR] [--report] [--print-all] [--print-unknown] [--include-stats] [--format FORMAT] [--cache] [--bloomfilter BLOOMFILTER]
 
 Analyse a forensic target to find and report files found and not found in hashlookup CIRCL public service.
 
 optional arguments:
   -h, --help            show this help message and exit
-  -v, --verbose         Verbose output
+  -v, --verbose         Verbose output.
   --extended-debug      Debug file processed along with the mode and type.
   --progress            Pring progress of the file lookup on stderr.
-  -d DIR, --dir DIR     Directory to analyse
-  --print-all           Print all files result including known and unknown
-  --print-unknown       Print all files unknown to hashlookup service
-  --include-stats       Include statistics in the CSV export
-  --format FORMAT       Output format (default is CSV)
-  --cache               Enable local cache of known and unknown hashes in /tmp/hashlookup-forensic-analyser
+  -d DIR, --dir DIR     Directory to analyse.
+  --report              Generate a report directory including a summary and all the results.
+  --print-all           Print all files result including known and unknown.
+  --print-unknown       Print all files unknown to hashlookup service.
+  --include-stats       Include statistics in the CSV export.
+  --format FORMAT       Output format (default is CSV).
+  --cache               Enable local cache of known and unknown hashes in /tmp/hashlookup-forensic-analyser.
   --bloomfilter BLOOMFILTER
-                        Specify filename of a bloomfilter in DCSO bloomfilter format
+                        Specify filename of a bloomfilter in DCSO bloomfilter format.
 ~~~~
 
-## Example
+## Sample report
+
+If you want to analyse a specific directory (in this case, a Kernel module directory), the following command be executed:
+
+`python3 hashlookup-analyser.py  --bloomfilter=../hashlookup/hashlookup-full.bloom.1 --report -d /usr/lib/modules/5.11.0-41-generic/`
+
+When executed with `--report`, a [summary report](./doc/sample-report/summary.md) in Markdown and a full [JSON](./doc/sample-report/full.json) file report are generated.
+
+[A sample summary report is available](https://gist.github.com/adulau/f72af0a77b07aad8951441d882c0f6d0).
+
+## Sample output
 
 ~~~~bash
 python3 hashlookup-analyser.py --print-all -d /usr/local/bin/ --include-stats --cache
@@ -74,6 +85,7 @@ unknown,/usr/local/bin/__pycache__/pdf2txt.cpython-38.pyc,0C22717A2D2C6676005B99
 unknown,/usr/local/bin/__pycache__/wsdump.cpython-38.pyc,ADD28D31B88E5995A0725A424B415C350726CFD5,6449
 stats,Analysed directory /usr/local/bin/ on kolmogorov running Linux-5.10.0-1045-oem-x86_64-with-glibc2.29 at 2021-10-17 15:50:07.299694+00:00- Found 6 on hashlookup.circl.lu - Unknown files 34 - Excluded files 0
 ~~~~
+
 ## Bloom filter
 
 If you don't want to share your lookups online and do faster lookup, hashlookup provides a [bloom filter to download](https://cra.circl.lu/hashlookup/hashlookup-full.bloom).
@@ -86,9 +98,10 @@ python3 bin/hashlookup-analyser.py --bloomfilter /home/adulau/hashlookup/hashloo
 
 # License
 
-The software is open source software released under the "Simplified BSD License".
+The software is an open source software released under the "Simplified BSD License".
 
-Copyright 2021 Alexandre Dulaunoy
+```
+Copyright 2021-2022 Alexandre Dulaunoy
 
 Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
 
@@ -97,4 +110,5 @@ Redistribution and use in source and binary forms, with or without modification,
 2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
 
 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```
 
