@@ -10,11 +10,12 @@ import stat
 import sys
 from glob import glob
 
+import magic
 import pytz
 import requests
 
 BUF_SIZE = 65536
-VERSION = "0.8"
+VERSION = "0.9"
 NAME = "hashlookup-forensic-analyser"
 # cache directory name needs to be known between execution of the script
 CACHE_DIR = "/tmp/hashlookup-forensic-analyser"  # nosec
@@ -158,6 +159,17 @@ def generate_report():
     for known in files['known_files']:
         markdown += f'|{known["FileName"]}|[{known["hash"]}](https://hashlookup.circl.lu/lookup/sha1/{known["hash"]})|\n'
 
+    s = dict(sorted(stat_filemagic.items(), key=lambda item: item[1], reverse=True))
+    markdown += "\n## MIME types\n"
+    markdown += "```mermaid\n"
+    markdown += f'pie title MIME types distribution of the {total} files found\n'
+    for val in s.keys():
+        markdown += f'    \"{val} ({s[val]})\" : {s[val]}\n'
+    markdown += "```\n\n"
+    markdown += "\n|MIME type|Occurences|\n"
+    markdown += "|:--------|:---------|\n"
+    for val in s.keys():
+        markdown += f'|{val}|{s[val]}|\n'
     f = open(os.path.join(dirname, "summary.md"), "w")
     f.write(markdown)
     f.close()
@@ -171,6 +183,8 @@ notanalysed_files = []
 files = {'known_files': [], 'unknown_files': []}  # type: ignore
 
 stats = {'found': 0, 'unknown': 0, 'excluded': 0, 'analysed': 0}
+
+stat_filemagic: dict = {}
 
 if args.progress:
     progress = 0
@@ -248,6 +262,12 @@ for fn in [y for x in os.walk(args.dir) for y in glob(os.path.join(x[0], '*'))]:
         notanalysed_files.append(f'{fn},{e}')
         stats['excluded'] += 1
         pass
+    with magic.Magic(flags=magic.MAGIC_MIME_TYPE) as m:
+        mime_type = m.id_filename(fn)
+        if mime_type in stat_filemagic:
+            stat_filemagic[mime_type] += 1
+        else:
+            stat_filemagic[mime_type] = 1
 
     knowncachefile = f'{CACHE_DIR}/known/{h}'
     cachefile = f'{CACHE_DIR}/unknown/{h}'
