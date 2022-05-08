@@ -6,6 +6,7 @@ import itertools
 import json
 import os
 import platform as pl
+import re
 import stat
 import sys
 from glob import glob
@@ -39,13 +40,25 @@ parser.add_argument(
     "--progress",
     action="store_true",
     default=True,
-    help="Pring progress of the file lookup on stderr.",
+    help="Print progress of the file lookup on stderr.",
+)
+parser.add_argument(
+    "--disable-progress",
+    action="store_true",
+    default=False,
+    help="Disable printing progress of the file lookup on stderr.",
 )
 parser.add_argument("-d", "--dir", help="Directory to analyse.")
 parser.add_argument(
     "--report",
     action="store_true",
     help="Generate a report directory including a summary and all the results.",
+    default=False,
+)
+parser.add_argument(
+    "--live-linux",
+    action="store_true",
+    help="View known and unknown files from the live processes (using /proc)",
     default=False,
 )
 parser.add_argument(
@@ -84,6 +97,8 @@ if args.bloomfilter is not None:
     if b"6F1C170761C212EFD5004DF7FB36CEAF9FB053F7" in bf:
         bloomfilter_source = "hashlookup-blomfilter"
 
+if args.live_linux:
+    args.dir = '/proc'
 if not args.dir:
     parser.print_help()
     sys.exit(1)
@@ -195,6 +210,18 @@ for fn in [y for x in os.walk(args.dir) for y in glob(os.path.join(x[0], '*'))]:
             f'\rAnalysing {fn} - Found {stats["found"]} - Unknown {stats["unknown"]}\n'
         )
         sys.stderr.flush()
+    if args.live_linux:
+        plive = os.path.normpath(fn).lstrip('/').split('/')
+        try:
+            plive[1]
+            plive[2]
+        except IndexError:
+            continue
+        if re.match(r"\d+", plive[1]) and re.match("exe", plive[2]):
+            plive_pid = plive[1]
+        else:
+            continue
+
     if not os.path.exists(fn):
         notanalysed_files.append(f'{fn}/listed-but-no-existing')
         stats['excluded'] += 1
@@ -204,7 +231,7 @@ for fn in [y for x in os.walk(args.dir) for y in glob(os.path.join(x[0], '*'))]:
     mode = fn_info.st_mode
     if args.extended_debug:
         print(f'file={fn}, mode={mode}, finfo={fn_info}')
-    if args.progress:
+    if args.progress and not args.disable_progress:
         sys.stderr.write(next(spinner))
         sys.stderr.write(
             f'  - Files analysed={stats["analysed"]}, excluded={stats["excluded"]}, unknown={stats["unknown"]}, found={stats["found"]}\r'
@@ -243,7 +270,7 @@ for fn in [y for x in os.walk(args.dir) for y in glob(os.path.join(x[0], '*'))]:
         stats['excluded'] += 1
         continue
 
-    sha1 = hashlib.sha1()
+    sha1 = hashlib.sha1()  # nosec
     try:
         with open(fn, 'rb') as f:
             try:
@@ -283,6 +310,8 @@ for fn in [y for x in os.walk(args.dir) for y in glob(os.path.join(x[0], '*'))]:
         t = {}
         t['FileName'] = fn
         t['hash'] = h
+        if args.live_linux:
+            t['pid'] = plive_pid
         files['unknown_files'].append(t)
         if args.cache:
             with open(f'{CACHE_DIR}/unknown/{h}', 'wb') as f:
@@ -292,6 +321,8 @@ for fn in [y for x in os.walk(args.dir) for y in glob(os.path.join(x[0], '*'))]:
         t = {}
         t['FileName'] = fn
         t['hash'] = h
+        if args.live_linux:
+            t['pid'] = plive_pid
         files['known_files'].append(t)
         if args.cache:
             with open(f'{CACHE_DIR}/known/{h}', 'wb') as f:
@@ -301,20 +332,35 @@ for fn in [y for x in os.walk(args.dir) for y in glob(os.path.join(x[0], '*'))]:
         print(hresult)
 
 if args.format == "csv":
-    print('hashlookup_result,filename,sha-1,size')
+    if not args.live_linux:
+        print('hashlookup_result,filename,sha-1,size')
+    else:
+        print('hashlookup_result,pid,filename,sha-1,size')
     if args.print_all:
         for key in files.keys():
             for file_object in files[key]:
                 fsize = os.path.getsize(file_object['FileName'])
                 filetype = key.split("_")
-                print(
-                    f"{filetype[0]},\"{file_object['FileName']}\",{file_object['hash']},{fsize}"
-                )
+                if not args.live_linux:
+                    print(
+                        f"{filetype[0]},\"{file_object['FileName']}\",{file_object['hash']},{fsize}"
+                    )
+                else:
+                    print(
+                        f"{filetype[0]},\"{file_object['pid']}\",\"{file_object['FileName']}\",{file_object['hash']},{fsize}"
+                    )
 
     elif args.print_unknown:
         for file_object in files['unknown_files']:
             fsize = os.path.getsize(file_object['FileName'])
-            print(f"unknown,{file_object['FileName']},{file_object['hash']},{fsize}")
+            if not args.live_linux:
+                print(
+                    f"unknown,\"{file_object['FileName']}\",\"{file_object['hash']}\",\"{fsize}\""
+                )
+            else:
+                print(
+                    f"unknown,\"{file_object['pid']}\",\"{file_object['FileName']}\", \"{file_object['hash']}\",\"{fsize}\""
+                )
 
     if args.include_stats:
         if args.bloomfilter is not None:
